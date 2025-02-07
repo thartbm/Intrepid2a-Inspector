@@ -1,0 +1,17 @@
+---
+title: "Data Inspector"
+output: html_notebook
+---
+
+To inspect data:
+
+1.  Change the participant ID in the second line (keep quotation marks).
+2.  Click the green triangle at the top right of the chunk to run it.
+
+The output should be several plots, that you can switch between by clicking on tabs.
+
+```{r fig.width=8, fig.height=5}
+source('R/inspecto.R')
+# inspect('tora05f8a')
+inspect('tor792279')
+```
