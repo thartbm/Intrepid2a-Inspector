@@ -211,7 +211,10 @@ findTaskFiles <- function(ID, task) {
   for (hf in c('LH','RH')) {
     
     # files for this hemifield:
-    Hfiles <- Pfiles[which(grepl(sprintf('_%s_', hf), Pfiles), Pfiles)]
+    # print(Pfiles)
+    # print(grepl(sprintf('_%s_', hf), Pfiles))
+    # 
+    Hfiles <- Pfiles[which(grepl(sprintf('_%s_', hf), Pfiles))]
     
     nums <- c()
     
