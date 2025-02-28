@@ -274,7 +274,7 @@ plotArea <- function(ID) {
     # print(unique(df$OriginalDiff))
     
     plot(-1000,-1000,
-         main=sprintf('%s %s area', hf, ID),xlab='trial',ylab='curvature',
+         main=sprintf('%s %s area', hf, ID),xlab='trial',ylab='area',
          xlim=c(0,(dim(df)[1]+1)),ylim=c(-3,6),
          ax=F,bty='n'
     )
@@ -334,7 +334,7 @@ plotCurvature <- function(ID) {
     df$StaircaseIndex <- df$Staircase + (2 * df$GreenStim) + (4 * df$Stimulus_position) + 1
     
     plot(-1000,-1000,
-         main=sprintf('%s %s area', hf, ID),xlab='trial',ylab='curvature',
+         main=sprintf('%s %s curvature', hf, ID),xlab='trial',ylab='curvature',
          xlim=c(0,(dim(df)[1]+1)),ylim=c(-0.4,0.4),
          ax=F,bty='n'
          )
@@ -389,7 +389,7 @@ plotDistance <- function(ID) {
     df <- df[which(df$Resp %in% c("1","2")),]
 
     plot(-1000,-1000,
-         main=sprintf('%s %s area', hf, ID),xlab='trial',ylab='curvature',
+         main=sprintf('%s %s distance', hf, ID),xlab='trial',ylab='distance',
          xlim=c(0,(dim(df)[1]+1)),ylim=c(-3.5,3.5),
          ax=F,bty='n'
     )
