@@ -11,11 +11,11 @@ findParticipants <- function() {
     
     for (CC in taskCCs) {
       
-      print(CC)
+      # print(CC)
       
       us1_idx <- unlist(gregexpr('_', CC))[1]
       
-      print(us1_idx)
+      # print(us1_idx)
       
       ppID <- substr( x     = CC, 
                       start = 1, 
@@ -29,6 +29,8 @@ findParticipants <- function() {
   
   IDs <- unique(IDs)
   
+  IDs <- IDs[which(nchar(IDs) > 8)]
+  
   return(IDs)
   
 }
@@ -38,8 +40,6 @@ BIDSifyAll <- function() {
   
   prepTaskFolders(tasks=c('area','curvature','distance'))
   
-  
-  
   participants <- findParticipants()
   
   # for each participants, decide if they are already BIDSified
@@ -47,8 +47,8 @@ BIDSifyAll <- function() {
   
   for (ppID in participants) {
     
-    if (not(isBIDSified(ppID))) {
-      BIDSifiyParticipant()
+    if (!(isBIDSified(ppID))) {
+      BIDSifiyParticipant(ppID)
     }
     
     
@@ -299,7 +299,7 @@ findTaskFiles <- function(ID, task) {
       lastfiles[[hf]] <- NULL
     } else {
       if (task == 'distance') {
-        lastfiles[[hf]] <- sprintf('../data/%s/%s_%s_%s_%d.txt', task, ID, 'dist', hf, max(nums))
+        lastfiles[[hf]] <- sprintf('../data/%s/%s_%s_%s_%d.txt', task, ID, 'dist', hf, min(nums))
       } else {
         lastfiles[[hf]] <- sprintf('../data/%s/%s_%s_%s_%d.txt', task, ID, task, hf, max(nums))
       }
@@ -525,7 +525,8 @@ prepTaskFolders <- function(tasks) {
     folder <- sprintf('../Intrepid2a_BIDS/task-%s/', task)
     
     dir.create( path = folder,
-                recursive = TRUE)
+                recursive = TRUE,
+                showWarnings = FALSE)
     
     file <- sprintf('%sdataset_description.json', folder)
     
@@ -634,7 +635,8 @@ BIDSifyCalibration <- function(ID, task) {
   folder <- sprintf('../Intrepid2a_BIDS/task-%s/sub-%s/beh/', task, ID)
   
   dir.create( path = folder,
-              recursive = TRUE)
+              recursive = TRUE,
+              showWarnings = FALSE)
   
   file <- sprintf('%ssub-%s_%s.json', folder, ID, task)
   # file <- sprintf('%ssub-%d_%s.json', folder, 1, task)
@@ -752,6 +754,8 @@ BIDSifyDistance <- function(ID) {
   
   files <- findTaskFiles(ID, 'distance')
   
+  allData <- NA
+  
   for (hf in c('LH','RH')) {
     
     if (is.null(files[[hf]])) {
@@ -763,6 +767,8 @@ BIDSifyDistance <- function(ID) {
       header=TRUE,
       sep='\t'
     )
+    # print(files[[hf]])
+    # print(dim(df))
     
     # df <- df[which(df$Resp %in% c("1","2")),]
     df$abort <- 1
@@ -771,12 +777,13 @@ BIDSifyDistance <- function(ID) {
     df$abort[which(df$Resp == 'abort')]      <- 2
     
     df$Resp[!which(df$Resp %in% c("1","2"))] <- NA
-    df$Resp <- as.numeric(df$Resp)
     
-    df$Targ_Chosen[!which(df$Targ_Chosen %in% c("False", "True"))] <- NA
-    df$Targ_Chosen <- as.logical(df$Targ_Chosen)
+    suppressWarnings( df$Resp <- as.numeric(df$Resp) ) # is this smart or the opposite?
     
-    df$Reversal[!which(df$Reversel %in% c("False", "True"))] <- NA
+    df$Targ_chosen[!which(df$Targ_chosen %in% c("False", "True"))] <- NA
+    df$Targ_chosen <- as.logical(df$Targ_chosen)
+    
+    df$Reversal[!which(df$Reversal %in% c("False", "True"))] <- NA
     df$Reversal <- as.logical(df$Reversal)
     
     df$HemiField <- list('LH'='left', 'RH'='right')[[hf]]
