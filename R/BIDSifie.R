@@ -124,7 +124,7 @@ BIDSifyAll <- function() {
     
     setwd(sprintf('../Intrepid2a_BIDS/%s-%s/', combis$data[combidx], combis$task[combidx]))
     
-    zip(sprintf('../%s-%s.zip',combis$data[combidx], combis$task[combidx]), '.', flags='-r')
+    zip(sprintf('../%s-%s.zip',combis$data[combidx], combis$task[combidx]), '.', flags='-rq')
     
     setwd(projectdir)
     
@@ -1291,5 +1291,38 @@ recordParticipant <- function(ID, task) {
                row.names = FALSE,
                col.names = TRUE,
                dec       = ".")
+  
+}
+
+
+# check participant counts between experiment and R -----
+
+
+compareCounts <- function() {
+  
+  BIDS <- read.csv('../Intrepid2a_BIDS/participants.tsv', sep='\t', stringsAsFactors = F)
+  
+  GUI <- read.csv('../Runner/participant_counts.csv', stringsAsFactors = F)
+  for (task in c('area','curvature','distance')) {
+    GUI[,task] <- as.logical(GUI[,task])
+  }
+  
+  cat('== OVERALL COMPARISON ==\n')
+  cat('IDs in GUI but not in BIDS:\n')
+  print(setdiff(GUI$ID, BIDS$ID))
+  cat('IDs in BIDS but not in GUI:\n')
+  print(setdiff(BIDS$ID, GUI$ID))
+  
+  cat('== COMPARISONS BY TASK ==\n')
+  for (task in c('area','curvature','distance')) {
+    cat(sprintf('\n== %s ==\n', task))
+    
+    GUI_IDS  <- GUI$ID[ which( GUI[,task])]
+    BIDS_IDS <- BIDS$ID[which(BIDS[,task])]
+    cat('IDs in GUI but not in BIDS:\n')
+    print(setdiff(GUI_IDS, BIDS_IDS))
+    cat('IDs in BIDS but not in GUI:\n')
+    print(setdiff(BIDS_IDS, GUI_IDS))
+  }
   
 }
