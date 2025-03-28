@@ -1292,6 +1292,8 @@ recordParticipant <- function(ID, task) {
                col.names = TRUE,
                dec       = ".")
   
+  cat(sprintf('recorded participant %s for %s\n', ID, task))
+  
 }
 
 
