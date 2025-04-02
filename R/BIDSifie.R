@@ -1,41 +1,45 @@
 
 # main functions -----
 
-findParticipants <- function() {
+BIDSifyAll <- function() {
   
-  IDs <- c()
+  cleanDemographics()
   
-  for (task in c('area', 'curvature', 'distance')) {
-    taskCCs <- list.files( path = sprintf('../data/%s/color/',task),
-                           pattern = '*.txt')
+  prepTaskFolders(tasks=c('area','curvature','distance'))
+  
+  todo <- getTodoList()
+  
+  doTodoList(todo)
+  
+  
+  reverseChecks()
+  
+  
+  combis <- expand.grid(task = c('area', 'curvature', 'distance'), data = c('task', 'eyetracking'))
+  
+  for (combidx in c(1:dim(combis)[1])) {
     
-    for (CC in taskCCs) {
-      
-      # print(CC)
-      
-      us1_idx <- unlist(gregexpr('_', CC))[1]
-      
-      # print(us1_idx)
-      
-      ppID <- substr( x     = CC, 
-                      start = 1, 
-                      stop  = us1_idx-1)
-      
-      IDs <- c(IDs, ppID)
-      
-    }
+    file.copy( from = '../Intrepid2a_BIDS/participants.tsv',
+               to = sprintf('../Intrepid2a_BIDS/%s-%s/participants.tsv', combis$data[combidx], combis$task[combidx]))
     
   }
   
-  IDs <- unique(IDs)
   
-  IDs <- IDs[which(nchar(IDs) > 8)]
+  projectdir <- getwd()
   
-  demographics <- getDemographics()
+  for (combidx in c(1:dim(combis)[1])) {
+    
+    setwd(sprintf('../Intrepid2a_BIDS/%s-%s/', combis$data[combidx], combis$task[combidx]))
+    
+    zip(sprintf('../%s-%s.zip',combis$data[combidx], combis$task[combidx]), '.', flags='-rq')
+    
+    setwd(projectdir)
+    
+  }
   
-  return(IDs)
   
 }
+
 
 
 cleanDemographics <- function() {
@@ -81,57 +85,139 @@ getDemographics <- function() {
   
 }
 
-BIDSifyAll <- function() {
-  
-  cleanDemographics()
-  
-  prepTaskFolders(tasks=c('area','curvature','distance'))
+getTodoList <- function() {
   
   participants <- findParticipants()
   
-  # for each participants, decide if they are already BIDSified
-  # if not, BIDSify them!
+  # make a todo list:
+  todo <- data.frame( 'ID'        = participants,
+                      'area'      = rep(FALSE,length(participants)),
+                      'curvature' = rep(FALSE,length(participants)),
+                      'distance'  = rep(FALSE,length(participants)))
   
-  for (pp_no in c(1:length(participants))) {
+  data_ppids <- c()
+  
+  for (idx in c(1:length(participants))) {
     
-    ppID <- participants[pp_no]
+    ID <- todo$ID[idx]
     
-    cat(sprintf('%s (%d/%d)\n',ppID,pp_no,length(participants)))
+    # cat(sprintf('%s (%d/%d)\n',todo$ID[idx],idx,length(participants)))
     
-    if (!(isBIDSified(ppID))) {
-      BIDSifiyParticipant(ppID)
+    # check files for participant
+    pp_todo <- checkParticipantFiles(ID)
+    
+    todo[idx,c('area', 'curvature', 'distance')] <- pp_todo[c('area', 'curvature', 'distance')]
+    
+    if (any(pp_todo)) {
+      data_ppids <- c(data_ppids, ID)
     }
     
   }
   
+  todo <- todo[which(todo$ID %in% data_ppids),]
   
-  reverseChecks()
-  
-  
-  combis <- expand.grid(task = c('area', 'curvature', 'distance'), data = c('task', 'eyetracking'))
-  
-  for (combidx in c(1:dim(combis)[1])) {
-    
-    file.copy( from = '../Intrepid2a_BIDS/participants.tsv',
-               to = sprintf('../Intrepid2a_BIDS/%s-%s/participants.tsv', combis$data[combidx], combis$task[combidx]))
-    
-  }
-  
-  
-  projectdir <- getwd()
-  
-  for (combidx in c(1:dim(combis)[1])) {
-    
-    setwd(sprintf('../Intrepid2a_BIDS/%s-%s/', combis$data[combidx], combis$task[combidx]))
-    
-    zip(sprintf('../%s-%s.zip',combis$data[combidx], combis$task[combidx]), '.', flags='-rq')
-    
-    setwd(projectdir)
-    
-  }
-  
+  return(todo)
   
 }
+
+findParticipants <- function() {
+  
+
+  
+  IDs <- c()
+  
+  for (task in c('area', 'curvature', 'distance')) {
+    taskCCs <- list.files( path = sprintf('../data/%s/color/',task),
+                           pattern = '*.txt')
+    
+    for (CC in taskCCs) {
+      
+      # print(CC)
+      
+      us1_idx <- unlist(gregexpr('_', CC))[1]
+      
+      # print(us1_idx)
+      
+      ppID <- substr( x     = CC, 
+                      start = 1, 
+                      stop  = us1_idx-1)
+      
+      IDs <- c(IDs, ppID)
+      
+    }
+    
+  }
+  
+  IDs <- unique(IDs)
+  
+  IDs <- IDs[which(nchar(IDs) > 8)]
+  
+  # known participants:
+  demographics <- read.csv('../data/cleaned_demographics.csv', stringsAsFactors = F)
+  
+  # these are participants with [some] data, that also exist in the demographics:
+  IDs <- IDs[which(IDs %in% demographics$ID)]
+  
+  # those are the only ones we want to work on:
+  return(IDs)
+  
+}
+
+prepTaskFolders <- function(tasks) {
+  
+  dataset_description <- list()
+  
+  # REQUIRED:
+  # dataset_description[['Name']] <- sprintf('Intrepid2a %s replication', task)
+  dataset_description[['BIDSVersion']] <- '1.10.0'
+  
+  # RECOMMENDED:
+  # dataset_description[['HEDVersion']] <- # string or array of strings
+  # dataset_description[['DatasetLinks']] <- # if BIDS URI's are used : object of strings
+  dataset_description[['DatasetType']] <- "raw"
+  # dataset_description[['License']] <- # string, see https://bids-specification.readthedocs.io/en/stable/appendices/licenses.html
+  dataset_description[['Authors']] <- list("Cavanagh, Patrick", "'t Hart, Bernard Marius") # array of strings, esp if data is from elsewhere
+  
+  # dataset_description[['GeneratedBy']] <- # array of objects # see https://bids-specification.readthedocs.io/en/stable/modality-agnostic-files.html
+  # dataset_description[['SourceDatasets']] <- # array of objects # see https://bids-specification.readthedocs.io/en/stable/modality-agnostic-files.html
+  
+  # OPTIONAL  
+  dataset_description[['Acknowledgements']] <- "We thank Mohammed Khan for help in collecting the data." # string
+  # dataset_description[['HowToAcknowledge']] <- # string
+  dataset_description[['Funding']] <- list("Templeton Foundation XXXX")# array of strings
+  dataset_description[['EthicsApproval']] <- list("York Univeristy's 'Human Participants Review Committee', protocol e2019-194; https://www.yorku.ca/research/human-participants/; Office of Research Ethics, ore@yorku.ca") # array of strings
+  # dataset_description[['ReferencesAndLinks']] <- # array of strings
+  # dataset_description[['DatasetDOI']] <- # string
+  
+  # json_dataset_description <- RJSONIO::toJSON(dataset_description)
+  
+  for (task in tasks) {
+    
+    dataset_description[['Name']] <- sprintf('Intrepid2a %s replication', task)
+    
+    json_dataset_description <- RJSONIO::toJSON(dataset_description)
+    
+    for (part in c('task','eyetracking')) {
+      
+      folder <- sprintf('../Intrepid2a_BIDS/%s-%s/', part, task)
+      
+      dir.create( path = folder,
+                  recursive = TRUE,
+                  showWarnings = FALSE)
+      
+      file <- sprintf('%sdataset_description.json', folder)
+      
+      write(json_dataset_description, file=file)
+      
+    }
+    
+  }
+  
+}
+
+
+
+
 
 reverseChecks <- function() {
   
@@ -161,7 +247,7 @@ reverseChecks <- function() {
       
       
       if (!file.exists(sprintf('../Intrepid2a_BIDS/task-%s/sub-%s/ses-%s/beh/sub-%s_%s.tsv', task, ID, task, ID, task))) {
-        cat(sprintf('psychophysics not present for %s - %s: rmoeving recording\n', ID, task))
+        cat(sprintf('psychophysics not present for %s - %s: removing recording\n', ID, task))
         participants[idx,task] <- FALSE
       } else {
         df <- read.delim(sprintf('../Intrepid2a_BIDS/task-%s/sub-%s/ses-%s/beh/sub-%s_%s.tsv', task, ID, task, ID, task),
@@ -205,111 +291,60 @@ reverseChecks <- function() {
 
 }
 
-isBIDSified <- function(ID) {
-  
-  # how do we even check this?
-  # ...
-  
-  # BIDSifying doesn't take that long anyway...
-  # if we want everyone to be BIDSified, we can just say that
-  # none of them are yet: 
-  return(FALSE)
-  
-}
+
+# BIDSifiyParticipant <- function(ID) {
+#   
+#   # first check if we know the participant:
+#   demographics <- read.csv('../data/cleaned_demographics.csv', stringsAsFactors = F)
+#   
+#   if (!(ID %in% demographics$ID)) {
+#     cat(sprintf('WARNING: participant NOT in cleaned demographics: %s!\n', ID))
+#     return()
+#   }
+#   
+#   # try all three experiments:
+#   BIDScheckArea(ID)
+#   BIDScheckCurvature(ID)
+#   BIDScheckDistance(ID)
+#   
+# }
 
 
-BIDSifiyParticipant <- function(ID) {
-  
-  # first check if we know the participant:
-  demographics <- read.csv('../data/cleaned_demographics.csv', stringsAsFactors = F)
-  
-  if (!(ID %in% demographics$ID)) {
-    cat(sprintf('WARNING: participant NOT in cleaned demographics: %s!\n', ID))
-    return()
-  }
-  
-  # try all three experiments:
-  BIDScheckArea(ID)
-  BIDScheckCurvature(ID)
-  BIDScheckDistance(ID)
-  
-}
 
-# top level functions for tasks -----
 
-BIDScheckArea <- function(ID) {
+
+# check files -----
+
+checkParticipantFiles <- function(ID) {
   
-  if (BIDSifyCalibration(ID, 'area')) {
+  todo <- c()
     
-    BIDSifyArea(ID)
+  for (task in c('area', 'curvature', 'distance')) {
     
-    if (taskBehavior(ID=ID, task='area')) {
-      BIDSifyEyeTrackingData(ID=ID, task='area')
+    cal <- checkCalibration(ID, task)
+    
+    eyetrack <- length(findEyeTrackingFiles(ID, task)) > 0
+    
+    # print(eyetrack)
+    
+    behavior <- length(findTaskFiles(ID, task)) > 0
+    
+    # print(behavior)
+    
+    if (cal & eyetrack & behavior) {
+      todo[task] <- TRUE
+    } else {
+      todo[task] <- FALSE
     }
-    
-  } else {
-    cat('calibration missing/incomplete for area task\n')
+
   }
   
-}
-
-taskBehavior <- function(ID, task) {
-  
-  output <- TRUE
-  calibration_file <- sprintf('../Intrepid2a_BIDS/task-%s/sub-%s/ses-%s/beh/sub-%s_%s.json', task, ID, task, ID, task)
-  psychophycs_file <- sprintf('../Intrepid2a_BIDS/task-%s/sub-%s/ses-%s/beh/sub-%s_%s.tsv', task, ID, task, ID, task)
-  for (file in c(calibration_file,psychophycs_file)) {
-    if (!file.exists(file)) {
-      output = FALSE
-    }
-  }
-  
-  return(output)
-  
-}
-
-BIDScheckCurvature <- function(ID) {
-
-  if (BIDSifyCalibration(ID, 'curvature')) {
-    
-    BIDSifyCurvature(ID)
-    
-    if (taskBehavior(ID=ID, task='area')) {
-      BIDSifyEyeTrackingData(ID=ID, task='curvature')
-    }
-    
-  } else {
-    cat('calibration missing/incomplete for curvature task\n')
-  }
-  
+  return(todo)
   
 }
 
 
-BIDScheckDistance <- function(ID) {
-  
-  # cat('checking distance calibration...\n')
-  
-  if (BIDSifyCalibration(ID, 'distance')) {
-    
-    # cat('calibration OK, BIDSify distance psychophysics...\n')
-    
-    BIDSifyDistance(ID)
-    
-    if (taskBehavior(ID=ID, task='distance')) {
-      BIDSifyEyeTrackingData(ID=ID, task='distance')
-    }
-    
-  } else {
-    cat('calibration missing/incomplete for distance task\n')
-  }
-  
-  
-}
-
-# generic calibration checker -----
-
-plotCalibration <- function(ID, task) {
+checkCalibration <- function(ID, task) {
   
   # get all color calibrations for the task:
   colcal <- list.files( path = sprintf('../data/%s/color/', task))
@@ -334,48 +369,20 @@ plotCalibration <- function(ID, task) {
   # if there are no numbers... we return to the caller: nothing to do!
   if (length(numbers) == 0) { return(FALSE) }
   
-  calidx <- max(numbers)
-
-  colorcalibration <- readLines( con  = sprintf('../data/%s/color/%s_col_cal_%d.txt', task, ID, calidx),
-                                 warn = FALSE)
-  colorlist <- list()
-  for (cc in colorcalibration) {
-    ccentry <- unlist(strsplit(cc, ":\t"))
-    # values <- as.numeric(unlist(strsplit( substr(ccentry[2],2,nchar(ccentry[2])-1), ',')))
-    # print(values)
-    values <- round( (as.numeric(unlist(strsplit( substr(ccentry[2],2,nchar(ccentry[2])-1), ','))) + 1) * (255/2) )
-    # print(rgb(red=values[1], green=values[2], blue=values[3], maxColorValue = 255))
-    
-    # print(strsplit(ccentry[[2]], '][,'))
-    
-    colorlist[ccentry[1]] <- rgb(red=values[1], green=values[2], blue=values[3], maxColorValue = 255)
-  }
-  # print(colorlist)
-  
-  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #  
-  # now read in the blind spot mapping info
-  
-  # bsmaps <- list.files( path = sprintf('../data/%s/mapping/', task),
-  #                       pattern = sprintf('%s_*.txt', ID))
-  
 
   # get all color calibrations for the task:
   bsmaps <- list.files( path = sprintf('../data/%s/mapping/', task))
-  # print(bsmaps)
+  
   # keep only those for the participant:
   bsLH <- bsmaps[which(substr(bsmaps, 1, nchar(ID)+3) == sprintf('%s_LH',ID))]
   bsRH <- bsmaps[which(substr(bsmaps, 1, nchar(ID)+3) == sprintf('%s_RH',ID))]
   
-  # print(bsLH)
-  # print(bsRH)
   
   blindspots <- list()
   
   for (hf in c('LH','RH')) {
     
     bs <- list('LH'=bsLH, 'RH'=bsRH)[[hf]]
-    
-    # print(bs)
     
     # select the last one:
     numbers <- c()
@@ -390,66 +397,169 @@ plotCalibration <- function(ID, task) {
     # for which ever blind spot map is not there, we can skip and not look for task data
     if (length(numbers) == 0) { return(FALSE) }
     
-    # print(numbers)
-    
-    # if there is one, we read in the one with the highest number:
-    bsidx <- max(numbers)
-    # print(bsidx)
-    
-    
-    hfbsmap <- readLines( con  = sprintf('../data/%s/mapping/%s_%s_blindspot_%d.txt', task, ID, hf, bsidx),
-                          warn = FALSE)
-    # print(hfbsmap)
-    bsprops <- list()
-    for (bspl in hfbsmap) {
-      # print(bspl)
-      bsentry <- unlist(strsplit(bspl, ":\t"))
-      # print(bsentry)
-      values <- as.numeric(unlist(strsplit( substr(bsentry[2],2,nchar(bsentry[2])-1), ','))) 
-      # print(values)
-      bsprops[[bsentry[1]]] <- values
-    }
-    # print(bsprops)
-
-    blindspots[[hf]] <- bsprops
-
   }
-
   
-  # screen properties:
-  # size       = [59.8, 33.6] # in cm
-  # distance   = 49.53 # in cm
-  
-  # red lens is on the right / green on the left
-  layout(mat=matrix(c(1),nrow=1))
-  par(mar=c(0.5,0.5,2,0.5))
-  
-  plot(-1000,-1000,
-       main=sprintf('%s calibration for %s', task, ID), xlab='',ylab='',
-       xlim=c(-25,25),ylim=c(-17,17),
-       ax=F,bty='n',asp=1)
-  
-  polygon(x=c(-30,30,30,-30),
-          y=c(-20,-20,20,20),
-          col=colorlist$background,
-          border=NA)
-  lines(x=c(-1,1),y=c(0,0),lw=3,col='black')
-  lines(x=c(0,0),y=c(-1,1),lw=3,col='black')
-  
-  
-  for (bsloc in c('RH','LH')) {
-    
-    polygon(x=(cos(seq(0,2*pi,pi/90))*blindspots[[bsloc]]$size[1]*0.5)+blindspots[[bsloc]]$position[1],
-            y=(sin(seq(0,2*pi,pi/90))*blindspots[[bsloc]]$size[2]*0.5)+blindspots[[bsloc]]$position[2],
-            col=colorlist[[list('RH'='red', 'LH'='green')[[bsloc]]]],
-            border=NA
-            )
-    
-  }
-  # print(blindspots)
+  # all files are here, success!
   
   return(TRUE)
+  
+}
 
+
+
+
+findEyeTrackingFiles <- function(ID, task) {
+  
+  allfiles <- list.files( path = sprintf('../data/%s/eyetracking/%s/', task, ID) )
+  ETfiles <- allfiles[ which( unlist(lapply(allfiles, getExtension)) == 'csv')  ]
+  
+  lastfiles <- list()
+  
+  for (hf in c('LH','RH')) {
+    
+    Hfiles <- ETfiles[which(grepl(hf, ETfiles))]
+    
+    nums <- c()
+    
+    for (hfile in Hfiles) {
+      # find the first period (just before the file extension)
+      pidx <- unlist(gregexpr('[.]', hfile))[1]
+      
+      # find the last hemifield indicator (just before the calibration number)
+      # hidx <- tail(grep(hf, hfile,value=FALSE, fixed=TRUE), n=1) + 1
+      
+      hidx <- 7
+      
+      # extract number/index of color calibration file:
+      nums <- c(nums, as.numeric(substr(hfile, hidx, pidx-1)))
+    }
+    # for which ever blind spot map is not there, we can skip and not look for task data
+    if (length(nums) == 0) {
+      cat(sprintf('no data file found for %s, %s hemifield\n', task, list('RH'='right','LH'='left')[[hf]]))
+      lastfiles[[hf]] <- NULL
+    } else { 
+      lastfiles[[hf]] <- sprintf('../data/%s/eyetracking/%s/dist%s%s.csv', task, ID, hf, max(nums))
+    }
+    
+  }
+  
+  if (task == 'curvature') {
+    print(lastfiles)
+  }
+  
+  return(lastfiles)
+  
+}
+
+
+
+# top level functions for task BIDSification -----
+
+doTodoList <- function(todo) {
+  
+  for (idx in c(1:dim(todo)[1])) {
+    
+    ID <- todo$ID[idx]
+    
+    for (task in c('area', 'curvature', 'distance')) {
+      
+      if (todo[idx,task] == TRUE) {
+        
+        if (task == 'area') {
+          BIDScheckArea(ID)
+        }
+        
+        if (task == 'curvature') {
+          # cat('checking in curvature\n')
+          BIDScheckCurvature(ID)
+        }
+        
+        if (task == 'distance') {
+          BIDScheckDistance(ID)
+        }
+
+      }
+      
+    }
+    
+  }
+  
+}
+
+
+BIDScheckArea <- function(ID) {
+  
+  if (BIDSifyCalibration(ID, 'area')) {
+    
+    BIDSifyArea(ID)
+    
+    if (taskBehavior(ID=ID, task='area')) {
+      BIDSifyEyeTrackingData(ID=ID, task='area')
+    }
+    
+  } else {
+    cat('calibration missing/incomplete for area task\n')
+  }
+  
+  return()
+  
+}
+
+# taskBehavior <- function(ID, task) {
+#   
+#   output <- TRUE
+#   calibration_file <- sprintf('../Intrepid2a_BIDS/task-%s/sub-%s/ses-%s/beh/sub-%s_%s.json', task, ID, task, ID, task)
+#   psychophycs_file <- sprintf('../Intrepid2a_BIDS/task-%s/sub-%s/ses-%s/beh/sub-%s_%s.tsv', task, ID, task, ID, task)
+#   for (file in c(calibration_file,psychophycs_file)) {
+#     if (!file.exists(file)) {
+#       output = FALSE
+#     }
+#   }
+#   
+#   return(output)
+#   
+# }
+
+BIDScheckCurvature <- function(ID) {
+  
+  if (BIDSifyCalibration(ID, 'curvature')) {
+    
+    BIDSifyCurvature(ID)
+    # cat('curvature behavior converted\n')
+    if (taskBehavior(ID=ID, task='curvature')) {
+      # cat('curvature behavior files exist\n')
+      BIDSifyEyeTrackingData(ID=ID, task='curvature')
+    }
+    
+  } else {
+    cat('calibration missing/incomplete for curvature task\n')
+  }
+  
+  return()
+  
+}
+
+
+BIDScheckDistance <- function(ID) {
+  
+  # cat('checking distance calibration...\n')
+  
+  if (BIDSifyCalibration(ID, 'distance')) {
+    
+    # cat('calibration OK, BIDSify distance psychophysics...\n')
+    
+    BIDSifyDistance(ID)
+    
+    if (taskBehavior(ID=ID, task='distance')) {
+      BIDSifyEyeTrackingData(ID=ID, task='distance')
+    }
+    
+  } else {
+    cat('calibration missing/incomplete for distance task\n')
+  }
+  
+  return()
+  
 }
 
 
@@ -483,7 +593,7 @@ findTaskFiles <- function(ID, task) {
     }
     # for which ever blind spot map is not there, we can skip and not look for task data
     if (length(nums) == 0) {
-      cat(sprintf('no data file found for %s, %s hemifield\n', task, list('RH'='right','LH'='left')[[hf]]))
+      # cat(sprintf('no data file found for %s, %s hemifield\n', task, list('RH'='right','LH'='left')[[hf]]))
       lastfiles[[hf]] <- NULL
     } else {
       if (task == 'distance') {
@@ -531,7 +641,7 @@ findEyeTrackingFiles <- function(ID, task) {
     }
     # for which ever blind spot map is not there, we can skip and not look for task data
     if (length(nums) == 0) {
-      cat(sprintf('no data file found for %s, %s hemifield\n', task, list('RH'='right','LH'='left')[[hf]]))
+      # cat(sprintf('no data file found for %s, %s hemifield\n', task, list('RH'='right','LH'='left')[[hf]]))
       lastfiles[[hf]] <- NULL
     } else { 
       lastfiles[[hf]] <- sprintf('../data/%s/eyetracking/%s/dist%s%s.csv', task, ID, hf, max(nums))
@@ -721,57 +831,6 @@ findEyeTrackingFiles <- function(ID, task) {
 # BIDSification replacement functions -----
 
 
-prepTaskFolders <- function(tasks) {
-  
-  dataset_description <- list()
-  
-  # REQUIRED:
-  # dataset_description[['Name']] <- sprintf('Intrepid2a %s replication', task)
-  dataset_description[['BIDSVersion']] <- '1.10.0'
-  
-  # RECOMMENDED:
-  # dataset_description[['HEDVersion']] <- # string or array of strings
-  # dataset_description[['DatasetLinks']] <- # if BIDS URI's are used : object of strings
-  dataset_description[['DatasetType']] <- "raw"
-  # dataset_description[['License']] <- # string, see https://bids-specification.readthedocs.io/en/stable/appendices/licenses.html
-  dataset_description[['Authors']] <- list("Cavanagh, Patrick", "'t Hart, Bernard Marius") # array of strings, esp if data is from elsewhere
-  
-  # dataset_description[['GeneratedBy']] <- # array of objects # see https://bids-specification.readthedocs.io/en/stable/modality-agnostic-files.html
-  # dataset_description[['SourceDatasets']] <- # array of objects # see https://bids-specification.readthedocs.io/en/stable/modality-agnostic-files.html
-  
-  # OPTIONAL  
-  dataset_description[['Acknowledgements']] <- "We thank Mohammed Khan for help in collecting the data." # string
-  # dataset_description[['HowToAcknowledge']] <- # string
-  dataset_description[['Funding']] <- list("Templeton Foundation XXXX")# array of strings
-  dataset_description[['EthicsApproval']] <- list("York Univeristy's 'Human Participants Review Committee', protocol e2019-194; https://www.yorku.ca/research/human-participants/; Office of Research Ethics, ore@yorku.ca") # array of strings
-  # dataset_description[['ReferencesAndLinks']] <- # array of strings
-  # dataset_description[['DatasetDOI']] <- # string
-  
-  # json_dataset_description <- RJSONIO::toJSON(dataset_description)
-  
-  for (task in tasks) {
-    
-    dataset_description[['Name']] <- sprintf('Intrepid2a %s replication', task)
-    
-    json_dataset_description <- RJSONIO::toJSON(dataset_description)
-
-    for (part in c('task','eyetracking')) {
-      
-      folder <- sprintf('../Intrepid2a_BIDS/%s-%s/', part, task)
-      
-      dir.create( path = folder,
-                  recursive = TRUE,
-                  showWarnings = FALSE)
-      
-      file <- sprintf('%sdataset_description.json', folder)
-      
-      write(json_dataset_description, file=file)
-      
-    }
-    
-  }
-  
-}
 
 
 BIDSifyCalibration <- function(ID, task) {
@@ -949,8 +1008,8 @@ BIDSifyEyeTrackingData <- function(ID, task) {
     # now move to this folder:
     folder <- sprintf('../Intrepid2a_BIDS/eyetracking-%s/sub-%s/ses-%s/beh/', task, ID, task)
     dir.create(folder, recursive = TRUE, showWarnings = FALSE)
-    print(filename)
-    print(folder)
+    # print(filename)
+    # print(folder)
     file.rename(filename, sprintf('%s%s', folder,filename))
     while (file.exists(filename)) {
       # that's ok?
@@ -960,7 +1019,10 @@ BIDSifyEyeTrackingData <- function(ID, task) {
     cat('no eyetracking data\n')
   }
   
+  # print(ID)
   recordParticipant(ID, task)
+  
+  return()
   
 }
 
@@ -1079,7 +1141,11 @@ BIDSifyArea <- function(ID) {
 
 BIDSifyCurvature <- function(ID) {
   
+  # cat('BIDSifying curvature\n')
+  
   files <- findTaskFiles(ID, 'curvature')
+  
+  # print(files)
   
   allData <- NA
   
@@ -1131,6 +1197,7 @@ BIDSifyCurvature <- function(ID) {
                  col.names = TRUE,
                  dec       = ".")
   }
+  
   # recordParticipant(ID, 'curvature')
   
 }
@@ -1293,6 +1360,24 @@ recordParticipant <- function(ID, task) {
                dec       = ".")
   
   cat(sprintf('recorded participant %s for %s\n', ID, task))
+  
+  return()
+  
+}
+
+
+taskBehavior <- function(ID, task) {
+  
+  output <- TRUE
+  calibration_file <- sprintf('../Intrepid2a_BIDS/task-%s/sub-%s/ses-%s/beh/sub-%s_%s.json', task, ID, task, ID, task)
+  psychophycs_file <- sprintf('../Intrepid2a_BIDS/task-%s/sub-%s/ses-%s/beh/sub-%s_%s.tsv', task, ID, task, ID, task)
+  for (file in c(calibration_file,psychophycs_file)) {
+    if (!file.exists(file)) {
+      output = FALSE
+    }
+  }
+  
+  return(output)
   
 }
 
